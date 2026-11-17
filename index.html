@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Real-Time Disaster Alert & Prediction System</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      background-color: #020617;
+      color: #e2e8f0;
+      font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    }
+    canvas {
+      background-color: #020617;
+      border: 1px solid #1e293b;
+      border-radius: 12px;
+      width: 100%;
+      height: 260px;
+      display: block;
+    }
+    .status-green {
+      background: rgba(34, 197, 94, 0.18);
+      color: #22c55e;
+      border: 1px solid #22c55e;
+    }
+    .status-yellow {
+      background: rgba(234, 179, 8, 0.18);
+      color: #eab308;
+      border: 1px solid #eab308;
+    }
+    .status-red {
+      background: rgba(239, 68, 68, 0.25);
+      color: #ef4444;
+      border: 1px solid #ef4444;
+      box-shadow: 0 0 18px rgba(239, 68, 68, 0.45);
+    }
+  </style>
+</head>
+<body class="min-h-screen p-4 md:p-8">
+
+  <div class="max-w-6xl mx-auto space-y-6">
+
+    <!-- Header Section -->
+    <header class="flex flex-wrap items-center justify-between gap-4 bg-slate-900 border border-slate-800 p-5 rounded-2xl shadow-lg">
+      <div>
+        <h1 class="text-xl md:text-2xl font-bold text-white">
+          REAL-TIME DISASTER ALERT &amp; PREDICTION SYSTEM
+        </h1>
+        <p class="text-xs md:text-sm text-slate-400 mt-1">
+          Edge IoT Node (ESP32 + MPU6050 Seismic + Atmospheric Smoke/Humidity Sensors)
+        </p>
+      </div>
+      <div id="status" class="px-5 py-2 rounded-full text-xs md:text-sm font-bold status-green">
+        NORMAL
+      </div>
+    </header>
+
+    <!-- Simulation Test Buttons (For Demo & Testing) -->
+    <div class="flex flex-wrap items-center justify-between gap-3 bg-slate-900/80 border border-slate-800 p-4 rounded-xl">
+      <div class="text-xs text-slate-400">
+        Node SSID: <strong class="text-emerald-400">disasterNode</strong> &bull;
+        MPU6050 I2C: <strong class="text-cyan-400">0x68 (Pins 21, 22)</strong> &bull;
+        Polling Rate: <strong class="text-slate-200">100 ms</strong>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <button onclick="setMode('NORMAL')" class="px-3 py-1.5 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-semibold hover:bg-emerald-500/30">
+          Normal Mode
+        </button>
+        <button onclick="setMode('MILD')" class="px-3 py-1.5 rounded-lg bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs font-semibold hover:bg-amber-500/30">
+          Mild Vibration
+        </button>
+        <button onclick="setMode('QUAKE')" class="px-3 py-1.5 rounded-lg bg-rose-500/20 border border-rose-500/40 text-rose-300 text-xs font-semibold hover:bg-rose-500/30">
+          Strong Earthquake
+        </button>
+        <button onclick="setMode('GAS')" class="px-3 py-1.5 rounded-lg bg-purple-500/20 border border-purple-500/40 text-purple-300 text-xs font-semibold hover:bg-purple-500/30">
+          Toxic Gas Leak
+        </button>
+      </div>
+    </div>
+
+    <!-- Real-Time KPI Metric Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl">
+        <span class="text-xs uppercase font-semibold text-slate-400">Seismic Index (MPU6050)</span>
+        <div id="val" class="text-3xl font-bold text-white mt-2">0.0180</div>
+        <p id="seismicSubText" class="text-xs text-emerald-400 mt-1">Normal Vibrations (&le; 0.05)</p>
+      </div>
+
+      <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl">
+        <span class="text-xs uppercase font-semibold text-slate-400">Atmospheric Level</span>
+        <div id="atmLevelVal" class="text-3xl font-bold text-cyan-400 mt-2">57.0%</div>
+        <p id="atmSubText" class="text-xs text-slate-400 mt-1">Normal Conditions</p>
+      </div>
+
+      <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl">
+        <span class="text-xs uppercase font-semibold text-slate-400">Smoke / Gas (MQ Sensor)</span>
+        <div id="smokeVal" class="text-3xl font-bold text-white mt-2">115 PPM</div>
+        <p class="text-xs text-slate-400 mt-1">Critical Threshold: 300 PPM</p>
+      </div>
+
+      <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl">
+        <span class="text-xs uppercase font-semibold text-slate-400">Relative Humidity</span>
+        <div id="humidityVal" class="text-3xl font-bold text-purple-400 mt-2">57.0%</div>
+        <p class="text-xs text-slate-400 mt-1">Filter Alpha: 0.95 | Gain: 2.5x</p>
+      </div>
+    </div>
+
+    <!-- Dual Live Waveform Graphs -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <!-- Seismic Graph -->
+      <div class="bg-slate-900 border border-slate-800 p-5 rounded-2xl shadow-lg">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-sm font-bold uppercase tracking-wider text-white">
+            Seismic Waveform Graph (MPU6050)
+          </h2>
+          <span class="text-xs text-slate-400">Threshold: 0.20</span>
+        </div>
+        <canvas id="graph" width="600" height="260"></canvas>
+      </div>
+
+      <!-- Atmospheric Graph -->
+      <div class="bg-slate-900 border border-slate-800 p-5 rounded-2xl shadow-lg">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-sm font-bold uppercase tracking-wider text-white">
+            Atmospheric Condition Graph (Smoke &amp; Humidity)
+          </h2>
+          <span class="text-xs text-cyan-400">Cyan: Smoke | Purple: Humidity</span>
+        </div>
+        <canvas id="atmGraph" width="600" height="260"></canvas>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const canvas = document.getElementById("graph");
+    const ctx = canvas.getContext("2d");
+    const atmCanvas = document.getElementById("atmGraph");
+    const atmCtx = atmCanvas.getContext("2d");
+
+    const BUFFER_LEN = 300;
+    let data = new Array(BUFFER_LEN).fill(0.018);
+    let smokeData = new Array(BUFFER_LEN).fill(115);
+    let humData = new Array(BUFFER_LEN).fill(57);
+
+    // Tuning Constants from ESP32 Code
+    const FILTER_ALPHA = 0.95;
+    const SEISMIC_GAIN = 2.5;
+    const SEISMIC_THRESHOLD = 0.20;
+    let seismicFiltered = 0.018;
+    let simMode = "NORMAL";
+
+    function setMode(mode) {
+      simMode = mode;
+    }
+
+    function getColor(v) {
+      if (v > 0.20) return "#ef4444"; // Red (Strong Vibration)
+      if (v > 0.05) return "#eab308"; // Yellow (Mild Vibration)
+      return "#22c55e";                // Green (Normal)
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Draw Seismic Waveform
+      for (let i = 1; i < data.length; i++) {
+        let x1 = (i - 1) * (canvas.width / data.length);
+        let y1 = canvas.height / 2 - data[i - 1] * 120;
+        let x2 = i * (canvas.width / data.length);
+        let y2 = canvas.height / 2 - data[i] * 120;
+
+        ctx.beginPath();
+        ctx.strokeStyle = getColor(data[i]);
+        ctx.lineWidth = 2;
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+      }
+
+      // Draw Atmospheric Graph
+      atmCtx.clearRect(0, 0, atmCanvas.width, atmCanvas.height);
+      for (let i = 1; i < smokeData.length; i++) {
+        let x1 = (i - 1) * (atmCanvas.width / smokeData.length);
+        let y1 = atmCanvas.height - (smokeData[i - 1] / 500) * (atmCanvas.height - 20) - 10;
+        let x2 = i * (atmCanvas.width / smokeData.length);
+        let y2 = atmCanvas.height - (smokeData[i] / 500) * (atmCanvas.height - 20) - 10;
+
+        atmCtx.beginPath();
+        atmCtx.strokeStyle = smokeData[i] > 300 ? "#ef4444" : "#22d3ee";
+        atmCtx.lineWidth = 2;
+        atmCtx.moveTo(x1, y1);
+        atmCtx.lineTo(x2, y2);
+        atmCtx.stroke();
+      }
+
+      atmCtx.beginPath();
+      atmCtx.strokeStyle = "#c084fc";
+      atmCtx.lineWidth = 1.5;
+      for (let i = 0; i < humData.length; i++) {
+        let x = i * (atmCanvas.width / humData.length);
+        let y = atmCanvas.height - (humData[i] / 100) * (atmCanvas.height - 20) - 10;
+        if (i === 0) atmCtx.moveTo(x, y);
+        else atmCtx.lineTo(x, y);
+      }
+      atmCtx.stroke();
+    }
+
+    function renderTelemetry(d) {
+      data.push(d.seismic);
+      data.shift();
+
+      smokeData.push(d.smoke_ppm);
+      smokeData.shift();
+
+      humData.push(d.humidity_pct);
+      humData.shift();
+
+      const atmLevel = Math.min(100, (d.smoke_ppm / 400) * 50 + d.humidity_pct * 0.5);
+
+      document.getElementById("val").innerHTML = Number(d.seismic).toFixed(4);
+      document.getElementById("smokeVal").innerHTML = Math.round(d.smoke_ppm) + " PPM";
+      document.getElementById("humidityVal").innerHTML = Number(d.humidity_pct).toFixed(1) + "%";
+      document.getElementById("atmLevelVal").innerHTML = atmLevel.toFixed(1) + "%";
+
+      let status = document.getElementById("status");
+      let seismicSub = document.getElementById("seismicSubText");
+      let atmSub = document.getElementById("atmSubText");
+
+      if (d.alert === "YES" || d.seismic > SEISMIC_THRESHOLD || d.smoke_ppm > 300) {
+        status.innerHTML = "&#9888; STRONG VIBRATION / HAZARD";
+        status.className = "px-5 py-2 rounded-full text-xs md:text-sm font-bold status-red";
+        seismicSub.innerHTML = "Critical Alert Exceeded!";
+        seismicSub.className = "text-xs text-rose-400 mt-1";
+        atmSub.innerHTML = d.smoke_ppm > 300 ? "Toxic Atmosphere Detected!" : "Elevated Risk";
+      } else if (d.seismic > 0.05 || d.smoke_ppm > 180) {
+        status.innerHTML = "MILD VIBRATION";
+        status.className = "px-5 py-2 rounded-full text-xs md:text-sm font-bold status-yellow";
+        seismicSub.innerHTML = "Mild Tremor Detected (0.05 - 0.20)";
+        seismicSub.className = "text-xs text-amber-400 mt-1";
+        atmSub.innerHTML = "Moderate Fluctuations";
+      } else {
+        status.innerHTML = "NORMAL";
+        status.className = "px-5 py-2 rounded-full text-xs md:text-sm font-bold status-green";
+        seismicSub.innerHTML = "Normal Vibrations (&le; 0.05)";
+        seismicSub.className = "text-xs text-emerald-400 mt-1";
+        atmSub.innerHTML = "Normal Conditions";
+      }
+
+      draw();
+    }
+
+    function simulateStep() {
+      let rawG = 0.006 + Math.random() * 0.005;
+      let smoke = 115 + (Math.random() - 0.5) * 4;
+      let hum = 57 + (Math.random() - 0.5) * 1;
+
+      if (simMode === "MILD") {
+        rawG = 0.04 + Math.random() * 0.04;
+      } else if (simMode === "QUAKE") {
+        rawG = 0.12 + Math.random() * 0.14;
+      } else if (simMode === "GAS") {
+        smoke = 340 + Math.random() * 60;
+        hum = 86 + Math.random() * 4;
+      }
+
+      seismicFiltered = (FILTER_ALPHA * seismicFiltered) + ((1 - FILTER_ALPHA) * (rawG * SEISMIC_GAIN));
+      let alertFlag = (seismicFiltered > SEISMIC_THRESHOLD || smoke > 300) ? "YES" : "NO";
+
+      renderTelemetry({
+        seismic: seismicFiltered,
+        smoke_ppm: smoke,
+        humidity_pct: hum,
+        alert: alertFlag
+      });
+    }
+
+    function update() {
+      if (window.location.protocol.startsWith("http") && simMode === "NORMAL") {
+        fetch('/data')
+          .then(r => r.json())
+          .then(d => {
+            renderTelemetry({
+              seismic: d.seismic ?? 0.018,
+              smoke_ppm: d.smoke_ppm ?? 115,
+              humidity_pct: d.humidity_pct ?? 57,
+              alert: d.alert ?? "NO"
+            });
+          })
+          .catch(() => simulateStep());
+      } else {
+        simulateStep();
+      }
+    }
+
+    setInterval(update, 100);
+  </script>
+</body>
+</html>
